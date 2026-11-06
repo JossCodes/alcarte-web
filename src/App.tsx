@@ -1237,6 +1237,9 @@ function CategoryEditor({ category, index, categoryCount, products, totalProduct
   const [drafts, setDrafts] = useState<ProductDraft[]>([])
   const [addingProduct, setAddingProduct] = useState(false)
   const [editingProductKey, setEditingProductKey] = useState<string | null>(null)
+  const [sorting, setSorting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ProductDraft | null>(null)
+  const [deletingProduct, setDeletingProduct] = useState(false)
   const [newProductPhoto, setNewProductPhoto] = useState<Blob | null>(null)
   const [newProductPhotoPreview, setNewProductPhotoPreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -1396,12 +1399,64 @@ function CategoryEditor({ category, index, categoryCount, products, totalProduct
       }
       setAddingProduct(false)
       if (!photoSaveFailed) await onSaved()
+      if (!photoSaveFailed) setEditingProductKey(null)
     } catch {
       setMessage('No se guardaron los cambios. Comprueba tu conexión e inténtalo de nuevo.')
     } finally {
       setSaving(false)
     }
   }
+
+  async function permanentlyDeleteProduct() {
+    if (!supabase || !deleteTarget?.id || deletingProduct) return
+    setDeletingProduct(true); setMessage('')
+    try {
+      const oldPath = products.find((product) => product.id === deleteTarget.id)?.image_path
+      const { data, error: deleteError } = await supabase.from('products').delete().eq('id', deleteTarget.id).eq('restaurant_id', category.restaurant_id).select('id')
+      if (deleteError || !data?.length) throw new Error('No se pudo eliminar el producto. El producto permanece en el menú.')
+      setDrafts((current) => current.filter((draft) => draft.id !== deleteTarget.id))
+      setEditingProductKey(null); setDeleteTarget(null)
+      await onSaved()
+      setMessage('Producto eliminado.')
+      if (oldPath && !(await removeUnusedProductImages([oldPath]))) setMessage('Producto eliminado. La limpieza de su foto quedó pendiente; el producto ya no aparece en el menú.')
+    } catch (deleteError) { setMessage(deleteError instanceof Error ? deleteError.message : 'No se pudo eliminar el producto.') }
+    finally { setDeletingProduct(false) }
+  }
+
+  function leaveProductEditor(discard = false) {
+    const current = drafts.find((draft) => draft.draftKey === editingProductKey)
+    if (current) {
+      const original = current.id ? products.find((product) => product.id === current.id) : null
+      const changed = !original || current.name !== original.name || current.description !== original.description || current.price !== (original.price_cents / 100).toFixed(2) || current.status !== original.status || Boolean(current.photoBlob) || Boolean(current.removeImage)
+      if (!discard && changed && !window.confirm('¿Descartar los cambios de este producto?')) return
+      if (!original) setDrafts((items) => items.filter((item) => item.draftKey !== current.draftKey))
+      else setDrafts((items) => items.map((item) => item.draftKey === current.draftKey ? { ...item, name: original.name, description: original.description, price: (original.price_cents / 100).toFixed(2), status: original.status, imagePath: original.image_path ?? null, photoBlob: null, photoPreview: undefined, removeImage: false } : item))
+      if (current.photoPreview) URL.revokeObjectURL(current.photoPreview)
+    }
+    setEditingProductKey(null); setMessage('')
+  }
+
+  const activeDraft = drafts.find((draft) => draft.draftKey === editingProductKey)
+  if (activeDraft) return <section className="product-editor-screen" aria-labelledby="product-editor-title">
+    <header><button type="button" className="text-button" onClick={() => leaveProductEditor()}>← Volver</button><h2 id="product-editor-title">{activeDraft.id ? 'Editar producto' : 'Agregar producto'}</h2><span>En {category.name}</span></header>
+    <form className="dedicated-product-form" onSubmit={(event) => { event.preventDefault(); void saveChanges() }}>
+      <label>Nombre<input autoFocus required maxLength={120} value={activeDraft.name} onChange={(event) => updateDraft(activeDraft.draftKey, { name: event.target.value })} /></label>
+      <label>Descripción <small>Opcional</small><textarea rows={3} maxLength={240} value={activeDraft.description} onChange={(event) => updateDraft(activeDraft.draftKey, { description: event.target.value })} /></label>
+      <label>Precio en pesos<input inputMode="decimal" type="text" required placeholder="89.50" value={activeDraft.price} onChange={(event) => updateDraft(activeDraft.draftKey, { price: event.target.value })} /></label>
+      <label>Categoría<select value={category.id} disabled><option value={category.id}>{category.name}</option></select></label>
+      <label>Disponibilidad<select value={activeDraft.status} onChange={(event) => updateDraft(activeDraft.draftKey, { status: event.target.value as Product['status'] })}><option value="available">Disponible</option><option value="sold_out">Agotado</option><option value="hidden">Oculto</option></select></label>
+      <div className="dedicated-photo"><strong>Foto</strong>{activeDraft.photoPreview || activeDraft.imagePath && !activeDraft.removeImage ? <img src={activeDraft.photoPreview ?? (activeDraft.imagePath ? publicSupabase?.storage.from('menu-images').getPublicUrl(activeDraft.imagePath).data.publicUrl : '')} alt="Vista previa de la foto del producto" /> : <span>Sin foto</span>}
+        <label className="photo-picker">{activeDraft.imagePath || activeDraft.photoBlob ? 'Cambiar foto' : 'Subir foto'}<input className="visually-hidden-file" type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const input = event.currentTarget; const file = input.files?.[0]; input.value = ''; if (!file) return; setMessage('Preparando la foto…'); try { const blob = await createJpegPreview(file); if (activeDraft.photoPreview) URL.revokeObjectURL(activeDraft.photoPreview); updateDraft(activeDraft.draftKey, { photoBlob: blob, photoPreview: URL.createObjectURL(blob), removeImage: false }); setMessage('Vista previa pendiente de guardar.') } catch (photoError) { setMessage(photoError instanceof Error ? photoError.message : 'No se pudo preparar la foto.') } }} /></label>
+        {(activeDraft.imagePath || activeDraft.photoBlob) && <button type="button" className="text-button" onClick={() => { if (activeDraft.photoPreview) URL.revokeObjectURL(activeDraft.photoPreview); updateDraft(activeDraft.draftKey, { photoBlob: null, photoPreview: undefined, removeImage: Boolean(activeDraft.imagePath), imagePath: null }) }}>Quitar foto</button>}
+        {activeDraft.photoBlob && <small>Vista previa pendiente de guardar; al cancelar no se publica.</small>}
+      </div>
+      {activeDraft.status === 'hidden' && <small className="hidden-status-help">Oculto: no aparece en el menú para tus clientes.</small>}
+      {message && <p className="category-save-message" role="status">{message}</p>}
+      <div className="dedicated-actions"><button className="save-category-button" type="submit" disabled={saving}>{saving ? 'Guardando…' : activeDraft.id ? 'Guardar cambios' : 'Agregar producto'}</button><button type="button" className="button button--outline" onClick={() => leaveProductEditor()}>Cancelar</button></div>
+      {activeDraft.id && <button type="button" className="delete-product-action" onClick={() => setDeleteTarget(activeDraft)}>Eliminar producto</button>}
+    </form>
+    {deleteTarget && <div className="confirm-backdrop"><section role="alertdialog" aria-modal="true" aria-labelledby="delete-product-title"><h2 id="delete-product-title">¿Eliminar «{deleteTarget.name}»?</h2><p>Se eliminará del menú y de tu cuenta. Esta acción no se puede deshacer.</p><div><button type="button" className="button button--outline" disabled={deletingProduct} onClick={() => setDeleteTarget(null)}>Cancelar</button><button type="button" className="button delete-confirm" disabled={deletingProduct} onClick={() => void permanentlyDeleteProduct()}>{deletingProduct ? 'Eliminando…' : 'Eliminar producto'}</button></div></section></div>}
+  </section>
 
   return <section className={`category-card${isOpen ? ' is-open' : ''}`}>
     <div className="category-summary">
@@ -1413,39 +1468,41 @@ function CategoryEditor({ category, index, categoryCount, products, totalProduct
     </div>
     {isOpen && <div className="category-editor-content">
       <div className="category-settings"><label className="category-name-field">Nombre de categoría<input value={name} maxLength={80} onChange={(event) => { setName(event.target.value); setMessage('') }} /></label><label className="switch-row"><input type="checkbox" checked={visible} onChange={(event) => { setVisible(event.target.checked); setMessage('') }} /><span className="switch-control" aria-hidden="true" /><span><strong>Mostrar en el menú</strong><small>Al apagarlo, tampoco se verán sus productos.</small></span></label></div>
-      <div className="product-list-heading"><div><span className="simple-kicker">PRODUCTOS</span><p>Arrastra el asa; con teclado, usa ↑ o ↓.</p></div><span>{drafts.length}</span></div>
+       <div className="product-list-heading"><div><span className="simple-kicker">PRODUCTOS</span><p>{sorting ? 'El orden se guarda al guardar los cambios.' : 'Administra productos de esta categoría.'}</p></div><button type="button" className="text-button" onClick={() => setSorting((value) => !value)}>{sorting ? 'Terminar orden' : 'Ordenar productos'}</button></div>
       <div className="sortable-products" onPointerUp={stopDragging} onPointerCancel={stopDragging}>
         {drafts.map((draft, productIndex) => <article className={`sortable-product${draggingKey === draft.draftKey ? ' is-dragging' : ''}`} data-sortable-key={draft.draftKey} key={draft.draftKey}>
-          <div className="product-grip-column"><button type="button" className="drag-handle" aria-label={`Arrastrar ${draft.name || 'producto sin nombre'}`} onPointerDown={(event) => { dragKey.current = draft.draftKey; hoverKey.current = draft.draftKey; setDraggingKey(draft.draftKey); event.currentTarget.setPointerCapture(event.pointerId) }} onPointerMove={onDragPointerMove} onPointerUp={stopDragging} onPointerCancel={stopDragging} onKeyDown={(event) => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); moveDraftBy(draft.draftKey, event.key === 'ArrowUp' ? -1 : 1) } }}>⠿</button><span>{String(productIndex + 1).padStart(2, '0')}</span></div>
+           {sorting && <div className="product-grip-column"><button type="button" className="drag-handle" aria-label={`Arrastrar ${draft.name || 'producto sin nombre'}`} onPointerDown={(event) => { dragKey.current = draft.draftKey; hoverKey.current = draft.draftKey; setDraggingKey(draft.draftKey); event.currentTarget.setPointerCapture(event.pointerId) }} onPointerMove={onDragPointerMove} onPointerUp={stopDragging} onPointerCancel={stopDragging}>⠿</button></div>}
            <div className="sortable-product-fields">
               <div className="product-summary-row">
                 <span className="product-summary-photo">{draft.photoPreview ? <img src={draft.photoPreview} alt="" /> : draft.imagePath ? <ProductImage path={draft.imagePath} alt="" /> : <span aria-hidden="true">Sin foto</span>}</span>
                 <span className="product-summary-copy"><strong>{draft.name || 'Producto sin nombre'}</strong><span>{formatMXN(parsePriceToCents(draft.price) ?? 0)} · {draft.status === 'available' ? 'Disponible' : draft.status === 'sold_out' ? 'Agotado' : 'Oculto'}</span></span>
-                <button type="button" className="product-edit-toggle" aria-expanded={editingProductKey === draft.draftKey} onClick={() => setEditingProductKey((current) => current === draft.draftKey ? null : draft.draftKey)}>{editingProductKey === draft.draftKey ? 'Cerrar' : 'Editar'}</button>
+                 <button type="button" className="product-edit-toggle" onClick={() => setEditingProductKey(draft.draftKey)}>Editar</button>
               </div>
               {editingProductKey === draft.draftKey && <div className="product-edit-form">
-                <label className="product-name-field">Nombre<input value={draft.name} maxLength={120} onChange={(event) => updateDraft(draft.draftKey, { name: event.target.value })} /></label>
+                 <label className="product-name-field">Nombre<input value={draft.name} maxLength={120} onChange={(event) => updateDraft(draft.draftKey, { name: event.target.value })} /></label>
                 <div className="product-detail-fields">
                   <label>Descripción opcional<input value={draft.description} maxLength={240} placeholder="Descripción" onChange={(event) => updateDraft(draft.draftKey, { description: event.target.value })} /></label>
                   <label>Precio en pesos<input inputMode="decimal" value={draft.price} placeholder="89.50" onChange={(event) => updateDraft(draft.draftKey, { price: event.target.value })} /></label>
                   <label>Disponibilidad<select value={draft.status} onChange={(event) => updateDraft(draft.draftKey, { status: event.target.value as Product['status'] })}><option value="available">Disponible</option><option value="sold_out">Agotado</option><option value="hidden">Oculto</option></select></label>
                 </div>
                 {draft.status === 'hidden' && <small className="hidden-status-help">Oculto: este producto no aparece en el menú para tus clientes.</small>}
-                <div className="product-photo-edit">
+                 <div className="product-photo-edit">
                   <label>{draft.imagePath || draft.photoBlob ? 'Cambiar foto' : 'Subir foto'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const input = event.currentTarget; const file = input.files?.[0]; input.value = ''; if (!file) return; setMessage('Preparando la foto…'); try { const blob = await createJpegPreview(file); updateDraft(draft.draftKey, { photoBlob: blob, photoPreview: URL.createObjectURL(blob), removeImage: false }); setMessage('Foto lista. Guarda los cambios para aplicarla.') } catch (photoError) { setMessage(photoError instanceof Error ? photoError.message : 'No se pudo procesar la imagen. Prueba con otra foto.') } }} /></label>
                   {draft.photoBlob && draft.photoPreview ? <img src={draft.photoPreview} alt="Vista previa de la foto" /> : draft.imagePath ? <ProductImage path={draft.imagePath} alt={draft.name} /> : <span>Sin foto</span>}
                   {(draft.imagePath || draft.photoBlob) && <button type="button" className="text-button" onClick={() => updateDraft(draft.draftKey, { photoBlob: null, photoPreview: undefined, removeImage: true, imagePath: null })}>Quitar foto</button>}
-                </div>
-              </div>}
+                 </div>
+                 {draft.id && <button type="button" className="delete-product-action" onClick={() => setDeleteTarget(draft)}>Eliminar producto</button>}
+               </div>}
             </div>
-           <div className="product-position-buttons"><button type="button" className="icon-button" aria-label={`Subir ${draft.name}`} disabled={productIndex === 0} onClick={() => moveDraftBy(draft.draftKey, -1)}>↑</button><button type="button" className="icon-button" aria-label={`Bajar ${draft.name}`} disabled={productIndex === drafts.length - 1} onClick={() => moveDraftBy(draft.draftKey, 1)}>↓</button></div>
+            {sorting && <div className="product-position-buttons"><button type="button" className="icon-button" aria-label={`Subir ${draft.name}`} disabled={productIndex === 0} onClick={() => moveDraftBy(draft.draftKey, -1)}>↑</button><button type="button" className="icon-button" aria-label={`Bajar ${draft.name}`} disabled={productIndex === drafts.length - 1} onClick={() => moveDraftBy(draft.draftKey, 1)}>↓</button></div>}
         </article>)}
       </div>
       {totalProductCount + drafts.filter((draft) => !draft.id).length < productLimit && <>
-        <button className="add-product-trigger" type="button" onClick={() => { setMessage(''); setAddingProduct((current) => !current) }}><span aria-hidden="true">＋</span> Agregar producto</button>
+         <button className="add-product-trigger" type="button" onClick={() => { const draftKey = crypto.randomUUID(); setDrafts((items) => [...items, { draftKey, name: '', description: '', price: '', status: 'available' }]); setMessage(''); setEditingProductKey(draftKey) }}><span aria-hidden="true">＋</span> Agregar producto</button>
         {addingProduct && <form className="new-product-form" onSubmit={addDraft}><div className="new-product-form-heading"><strong>Agregar producto</strong><button type="button" className="text-button" onClick={() => { setAddingProduct(false); if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); setNewProductPhoto(null); setNewProductPhotoPreview(null) }}>Cancelar</button></div><label>Nombre<input name="name" maxLength={120} required autoFocus /></label><label>Descripción<input name="description" maxLength={240} placeholder="Opcional" /></label><div className="new-product-bottom"><label>Precio en pesos<input name="price" inputMode="decimal" placeholder="89.50" required /></label><label>Disponibilidad<select name="status" defaultValue="available"><option value="available">Disponible</option><option value="sold_out">Agotado</option><option value="hidden">Oculto</option></select></label></div><small className="hidden-status-help">Oculto: no aparece en el menú para tus clientes.</small><label className="new-product-photo">{newProductPhoto ? 'Foto lista' : 'Subir foto (opcional)'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const input = event.currentTarget; const file = input.files?.[0]; input.value = ''; if (!file) return; setMessage('Preparando la foto…'); try { const blob = await createJpegPreview(file); if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); setNewProductPhoto(blob); setNewProductPhotoPreview(URL.createObjectURL(blob)); setMessage('Foto lista.') } catch (photoError) { setMessage(photoError instanceof Error ? photoError.message : 'No se pudo procesar la foto. Prueba con otra imagen.') } }} /></label>{newProductPhotoPreview && <img className="new-product-photo-preview" src={newProductPhotoPreview} alt="Vista previa del producto" />}<button className="button button--outline" type="submit">Agregar producto</button></form>}
       </>}
-      {message && <p className="category-save-message" role="status">{message}</p>}
+       {message && <p className="category-save-message" role="status">{message}</p>}
+       {deleteTarget && <div className="confirm-backdrop"><section role="alertdialog" aria-modal="true" aria-labelledby="delete-product-title"><h2 id="delete-product-title">¿Eliminar «{deleteTarget.name}»?</h2><p>Se eliminará del menú y de tu cuenta. Esta acción no se puede deshacer.</p><div><button type="button" className="button button--outline" disabled={deletingProduct} onClick={() => setDeleteTarget(null)}>Cancelar</button><button type="button" className="button delete-confirm" disabled={deletingProduct} onClick={() => void permanentlyDeleteProduct()}>{deletingProduct ? 'Eliminando…' : 'Eliminar producto'}</button></div></section></div>}
       <button className="delete-category-button" type="button" disabled={saving || deleting} onClick={onDelete}>{deleting ? 'Eliminando categoría…' : `Eliminar categoría y ${products.length} productos`}</button>
       <div className="category-save-bar"><span>{dirty ? 'Tienes cambios sin guardar' : 'Todo al día'}</span><button className="save-category-button" type="button" disabled={!dirty || saving} onClick={() => void saveChanges()}>{saving ? 'Guardando…' : 'Guardar cambios'}</button></div>
     </div>}

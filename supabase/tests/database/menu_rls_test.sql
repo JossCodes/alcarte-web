@@ -1,5 +1,5 @@
 begin;
-select plan(28);
+select plan(30);
 
 -- Non-login identities are created only inside this rolled-back policy test.
 insert into auth.users (
@@ -107,6 +107,15 @@ select throws_ok(
   $$update public.products set restaurant_id = '51000000-0000-4000-8000-000000000002'
     where id = '53000000-0000-4000-8000-000000000001'$$,
   '42501', null, 'owner cannot reassign a product to another restaurant'
+);
+select results_eq(
+  $$delete from public.products where id = '53000000-0000-4000-8000-000000000001' returning id$$,
+  array['53000000-0000-4000-8000-000000000001'::uuid],
+  'owner permanently deletes a product from their restaurant'
+);
+select is_empty(
+  $$delete from public.products where id = '53000000-0000-4000-8000-000000000005' returning id$$,
+  'owner cannot delete another restaurant product'
 );
 reset role;
 insert into public.restaurants (id, slug, name, product_limit) values
