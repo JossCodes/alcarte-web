@@ -390,6 +390,21 @@ function PublicMenuPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    if (!themeColor) return
+    const previousColor = themeColor.content
+    if (restaurant) {
+      const colors: Record<MenuTheme, string> = {
+        minimal: '#FFFFFF',
+        classic: '#F5EDDF',
+        night: '#191D1A',
+      }
+      themeColor.content = colors[restaurant.menu_theme] ?? colors.minimal
+    }
+    return () => { themeColor.content = previousColor }
+  }, [restaurant])
+
+  useEffect(() => {
     let active = true
     async function loadMenu() {
       setLoading(true)
