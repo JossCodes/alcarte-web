@@ -963,10 +963,10 @@ function MenuAppearanceEditor({ restaurant, categories, products }: { restaurant
   </section>
 }
 
-function createWebpPreview(file: File): Promise<Blob> {
+function createJpegPreview(file: File): Promise<Blob> {
   return new Promise(async (resolve, reject) => {
-    if (file.size > 5 * 1024 * 1024) {
-      reject(new Error('La foto debe pesar 5 MB o menos. Elige otra imagen.'))
+    if (file.size > 20 * 1024 * 1024) {
+      reject(new Error('La foto debe pesar 20 MB o menos. Elige otra imagen.'))
       return
     }
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
@@ -999,18 +999,19 @@ function createWebpPreview(file: File): Promise<Blob> {
     for (let resize = 0; resize < 8; resize += 1) {
       canvas.width = Math.max(1, Math.round(bitmap.width * scale))
       canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-      context.clearRect(0, 0, canvas.width, canvas.height)
+      context.fillStyle = '#FFFFFF'
+      context.fillRect(0, 0, canvas.width, canvas.height)
       context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
       for (let quality = 0.84; quality >= 0.42; quality -= 0.07) {
-        const blob = await new Promise<Blob | null>((finish) => canvas.toBlob(finish, 'image/webp', quality))
+        const blob = await new Promise<Blob | null>((finish) => canvas.toBlob(finish, 'image/jpeg', quality))
         if (!blob) {
           bitmap.close()
           reject(new Error('No pudimos preparar esta foto. Prueba con otra imagen.'))
           return
         }
-        if (blob.type !== 'image/webp') {
+        if (blob.type !== 'image/jpeg') {
           bitmap.close()
-          reject(new Error('No se pudo procesar esta foto en el dispositivo. Prueba con otra imagen.'))
+          reject(new Error('Safari no pudo preparar esta foto. Prueba con otra imagen o navegador.'))
           return
         }
         if (blob.size <= 100 * 1024) {
@@ -1101,7 +1102,7 @@ function MenuImageEditor({ restaurant, onSaved }: { restaurant: Restaurant; onSa
     if (!file) return
     setError(''); setMessage('')
     try {
-      const blob = await createWebpPreview(file)
+      const blob = await createJpegPreview(file)
       showPreview(blob, target)
       if (target === 'logo') { setLogoBlob(blob); setRemoveLogo(false) }
       else { setCoverBlob(blob); setRemoveCover(false) }
@@ -1123,14 +1124,14 @@ function MenuImageEditor({ restaurant, onSaved }: { restaurant: Restaurant; onSa
 
   async function uploadImage(blob: Blob, slot: 'logo' | 'cover', currentPath: string | null): Promise<string> {
     if (!supabase) throw new Error('Supabase no está configurado.')
-    const currentSlot = currentPath?.match(/-([ab])\.webp$/)?.[1]
+    const currentSlot = currentPath?.match(/-([ab])\.(?:webp|jpg)$/)?.[1]
     const nextSlot = currentSlot === 'a' ? 'b' : 'a'
-    const path = `${restaurant.id}/${slot}-${nextSlot}.webp`
+    const path = `${restaurant.id}/${slot}-${nextSlot}.jpg`
     const bucket = supabase.storage.from('menu-images')
     const { error: staleSlotError } = await bucket.remove([path])
     if (staleSlotError) throw new Error('No se pudo preparar el reemplazo de la imagen. Intenta de nuevo.')
     const { error: uploadError } = await bucket.upload(path, blob, {
-      contentType: 'image/webp', upsert: false, cacheControl: '60',
+      contentType: 'image/jpeg', upsert: false, cacheControl: '60',
     })
     if (uploadError) throw new Error('No se pudo subir la imagen. Comprueba tu conexión e inténtalo de nuevo.')
     return path
@@ -1335,11 +1336,11 @@ function CategoryEditor({ category, index, categoryCount, products, totalProduct
         let imageReferenceSaved = false
         try {
           if (draft.photoBlob) {
-            const currentSlot = oldPath?.match(/-([ab])\.webp$/)?.[1]
+            const currentSlot = oldPath?.match(/-([ab])\.(?:webp|jpg)$/)?.[1]
             const slot = currentSlot === 'a' ? 'b' : 'a'
-            uploadedPath = `${category.restaurant_id}/products/${productId}-${slot}.webp`
+            uploadedPath = `${category.restaurant_id}/products/${productId}-${slot}.jpg`
             const bucket = supabase.storage.from('menu-images')
-            const { error: uploadError } = await bucket.upload(uploadedPath, draft.photoBlob, { contentType: 'image/webp', upsert: false, cacheControl: '60' })
+            const { error: uploadError } = await bucket.upload(uploadedPath, draft.photoBlob, { contentType: 'image/jpeg', upsert: false, cacheControl: '60' })
             if (uploadError) throw new Error('No se pudo subir la foto del producto.')
             nextPath = uploadedPath
           }
@@ -1401,7 +1402,7 @@ function CategoryEditor({ category, index, categoryCount, products, totalProduct
                 </div>
                 {draft.status === 'hidden' && <small className="hidden-status-help">Oculto: este producto no aparece en el menú para tus clientes.</small>}
                 <div className="product-photo-edit">
-                  <label>{draft.imagePath || draft.photoBlob ? 'Cambiar foto' : 'Subir foto'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const input = event.currentTarget; const file = input.files?.[0]; input.value = ''; if (!file) return; setMessage('Preparando la foto…'); try { const blob = await createWebpPreview(file); updateDraft(draft.draftKey, { photoBlob: blob, photoPreview: URL.createObjectURL(blob), removeImage: false }); setMessage('Foto lista. Guarda los cambios para aplicarla.') } catch (photoError) { setMessage(photoError instanceof Error ? photoError.message : 'No se pudo procesar la imagen. Prueba con otra foto.') } }} /></label>
+                  <label>{draft.imagePath || draft.photoBlob ? 'Cambiar foto' : 'Subir foto'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const input = event.currentTarget; const file = input.files?.[0]; input.value = ''; if (!file) return; setMessage('Preparando la foto…'); try { const blob = await createJpegPreview(file); updateDraft(draft.draftKey, { photoBlob: blob, photoPreview: URL.createObjectURL(blob), removeImage: false }); setMessage('Foto lista. Guarda los cambios para aplicarla.') } catch (photoError) { setMessage(photoError instanceof Error ? photoError.message : 'No se pudo procesar la imagen. Prueba con otra foto.') } }} /></label>
                   {draft.photoBlob && draft.photoPreview ? <img src={draft.photoPreview} alt="Vista previa de la foto" /> : draft.imagePath ? <ProductImage path={draft.imagePath} alt={draft.name} /> : <span>Sin foto</span>}
                   {(draft.imagePath || draft.photoBlob) && <button type="button" className="text-button" onClick={() => updateDraft(draft.draftKey, { photoBlob: null, photoPreview: undefined, removeImage: true, imagePath: null })}>Quitar foto</button>}
                 </div>
@@ -1412,7 +1413,7 @@ function CategoryEditor({ category, index, categoryCount, products, totalProduct
       </div>
       {totalProductCount + drafts.filter((draft) => !draft.id).length < 40 && <>
         <button className="add-product-trigger" type="button" onClick={() => { setMessage(''); setAddingProduct((current) => !current) }}><span aria-hidden="true">＋</span> Agregar producto</button>
-        {addingProduct && <form className="new-product-form" onSubmit={addDraft}><div className="new-product-form-heading"><strong>Agregar producto</strong><button type="button" className="text-button" onClick={() => { setAddingProduct(false); if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); setNewProductPhoto(null); setNewProductPhotoPreview(null) }}>Cancelar</button></div><label>Nombre<input name="name" maxLength={120} required autoFocus /></label><label>Descripción<input name="description" maxLength={240} placeholder="Opcional" /></label><div className="new-product-bottom"><label>Precio en pesos<input name="price" inputMode="decimal" placeholder="89.50" required /></label><label>Disponibilidad<select name="status" defaultValue="available"><option value="available">Disponible</option><option value="sold_out">Agotado</option><option value="hidden">Oculto</option></select></label></div><small className="hidden-status-help">Oculto: no aparece en el menú para tus clientes.</small><label className="new-product-photo">{newProductPhoto ? 'Foto lista' : 'Subir foto (opcional)'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const input = event.currentTarget; const file = input.files?.[0]; input.value = ''; if (!file) return; setMessage('Preparando la foto…'); try { const blob = await createWebpPreview(file); if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); setNewProductPhoto(blob); setNewProductPhotoPreview(URL.createObjectURL(blob)); setMessage('Foto lista.') } catch (photoError) { setMessage(photoError instanceof Error ? photoError.message : 'No se pudo procesar la foto. Prueba con otra imagen.') } }} /></label>{newProductPhotoPreview && <img className="new-product-photo-preview" src={newProductPhotoPreview} alt="Vista previa del producto" />}<button className="button button--outline" type="submit">Agregar producto</button></form>}
+        {addingProduct && <form className="new-product-form" onSubmit={addDraft}><div className="new-product-form-heading"><strong>Agregar producto</strong><button type="button" className="text-button" onClick={() => { setAddingProduct(false); if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); setNewProductPhoto(null); setNewProductPhotoPreview(null) }}>Cancelar</button></div><label>Nombre<input name="name" maxLength={120} required autoFocus /></label><label>Descripción<input name="description" maxLength={240} placeholder="Opcional" /></label><div className="new-product-bottom"><label>Precio en pesos<input name="price" inputMode="decimal" placeholder="89.50" required /></label><label>Disponibilidad<select name="status" defaultValue="available"><option value="available">Disponible</option><option value="sold_out">Agotado</option><option value="hidden">Oculto</option></select></label></div><small className="hidden-status-help">Oculto: no aparece en el menú para tus clientes.</small><label className="new-product-photo">{newProductPhoto ? 'Foto lista' : 'Subir foto (opcional)'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const input = event.currentTarget; const file = input.files?.[0]; input.value = ''; if (!file) return; setMessage('Preparando la foto…'); try { const blob = await createJpegPreview(file); if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); setNewProductPhoto(blob); setNewProductPhotoPreview(URL.createObjectURL(blob)); setMessage('Foto lista.') } catch (photoError) { setMessage(photoError instanceof Error ? photoError.message : 'No se pudo procesar la foto. Prueba con otra imagen.') } }} /></label>{newProductPhotoPreview && <img className="new-product-photo-preview" src={newProductPhotoPreview} alt="Vista previa del producto" />}<button className="button button--outline" type="submit">Agregar producto</button></form>}
       </>}
       {message && <p className="category-save-message" role="status">{message}</p>}
       <button className="delete-category-button" type="button" disabled={saving || deleting} onClick={onDelete}>{deleting ? 'Eliminando categoría…' : `Eliminar categoría y ${products.length} productos`}</button>

@@ -16,7 +16,7 @@ insert into public.platform_admins (user_id) values ('67000000-0000-4000-8000-00
 set local role authenticated;
 set local request.jwt.claim.sub = '67000000-0000-4000-8000-000000000002';
 select is(public.admin_restore_menu_backup('68000000-0000-4000-8000-000000000001',
-  '{"format":"alcarte-menu-backup","version":1,"restaurant":{"name":"Restaurado","description":"Descripción","menu_theme":"night","menu_accent_color":"#345678"},"categories":[{"name":"Especiales","sort_order":0,"is_visible":false,"products":[{"id":"68000000-0000-4000-8000-000000000003","image_path":"68000000-0000-4000-8000-000000000001/products/68000000-0000-4000-8000-000000000003-b.webp","name":"Uno","description":"","price_cents":1000,"status":"available","sort_order":0},{"name":"Dos","description":"","price_cents":1200,"status":"hidden","sort_order":1}]},{"name":"Vacía","sort_order":1,"is_visible":true,"products":[]}]}'::jsonb
+  '{"format":"alcarte-menu-backup","version":1,"restaurant":{"name":"Restaurado","description":"Descripción","menu_theme":"night","menu_accent_color":"#345678"},"categories":[{"name":"Especiales","sort_order":0,"is_visible":false,"products":[{"id":"68000000-0000-4000-8000-000000000003","image_path":"68000000-0000-4000-8000-000000000001/products/68000000-0000-4000-8000-000000000003-b.jpg","name":"Uno","description":"","price_cents":1000,"status":"available","sort_order":0},{"name":"Dos","description":"","price_cents":1200,"status":"hidden","sort_order":1}]},{"name":"Vacía","sort_order":1,"is_visible":true,"products":[]}]}'::jsonb
 ), 2, 'platform admin restores a versioned backup');
 reset role;
 select results_eq(
@@ -30,7 +30,7 @@ select results_eq(
 select is((select count(*)::integer from public.categories where restaurant_id='68000000-0000-4000-8000-000000000001'), 2, 'empty categories are preserved in a JSON restore');
 select results_eq(
   $$select id::text || ':' || image_path from public.products where id='68000000-0000-4000-8000-000000000003'$$,
-  array['68000000-0000-4000-8000-000000000003:68000000-0000-4000-8000-000000000001/products/68000000-0000-4000-8000-000000000003-b.webp'],
+  array['68000000-0000-4000-8000-000000000003:68000000-0000-4000-8000-000000000001/products/68000000-0000-4000-8000-000000000003-b.jpg'],
   'backup restore preserves product UUID and optional image reference'
 );
 select throws_ok(

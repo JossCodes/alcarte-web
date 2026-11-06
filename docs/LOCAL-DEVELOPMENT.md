@@ -65,7 +65,7 @@ El bootstrap ficticio solo corre con `pnpm seed:demo-users` y una URL localhost.
 
 ## Imágenes de menú
 
-La carta acepta logo y foto opcional desde el panel. El navegador decodifica JPG/PNG/WebP de entrada (máximo 5 MB), limita la dimensión a 1200 px y vuelve a codificar a WebP hasta 100 KiB; la subida falla si el navegador no puede producir WebP. Storage API aplica además el límite de 100 KiB y `image/webp`. No hay proveedor externo ni imgproxy.
+La carta acepta logo y foto opcional desde el panel. El navegador decodifica JPG/PNG/WebP de entrada (máximo 20 MB), limita la dimensión a 1200 px y codifica las imágenes nuevas como JPEG hasta 100 KiB. Las áreas transparentes se rellenan de blanco al convertir a JPEG. Storage conserva WebP existentes y acepta JPEG nuevos; aplica un límite final de 100 KiB. No hay proveedor externo ni imgproxy.
 
 El bucket `menu-images` es **público intencionalmente** porque solo contiene recursos publicados de cartas. Los nombres son fijos por restaurante y alternan dos ranuras por logo/portada; las políticas de Storage y RPC validan membresía, estado activo y pertenencia del path, evitando archivos entre restaurantes y acumulación de reemplazos. Los archivos no incluyen información privada. Un objeto publicado puede ser solicitado directamente mientras exista; quitarlo elimina el objeto actual, pero no borra copias/cachés que alguien ya haya descargado.
 
