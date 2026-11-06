@@ -70,7 +70,7 @@ function TopBar() {
       </Link>
       <span className="topbar-note">Menús públicos para restaurantes</span>
       <Link className="topbar-link" to="/login">
-        {session ? 'Mi menú' : 'Acceso restaurantes'} <span aria-hidden="true">↗</span>
+        {session ? 'Mi menú' : 'Acceso restaurantes'} <span aria-hidden="true">↗︎</span>
       </Link>
     </header>
   )
@@ -645,7 +645,7 @@ function ProtectedArea({ area }: { area: 'panel' | 'administración' }) {
 
   return (
     <main className="owner-page page-width">
-      <div className="owner-heading"><div><div className="simple-kicker">PANEL DEL RESTAURANTE</div><h1>{restaurant?.name ?? 'Tu menú'}</h1>{restaurant && <Link className="owner-public-link" to={`/m/${restaurant.slug}`} target="_blank" rel="noreferrer">Ver menú ↗</Link>}</div><div className="owner-session-actions"><button className="button button--outline" type="button" onClick={() => void signOut()}>Cerrar sesión</button><small className="signout-scope">Solo en este navegador</small></div></div>
+      <div className="owner-heading"><div><div className="simple-kicker">PANEL DEL RESTAURANTE</div><h1>{restaurant?.name ?? 'Tu menú'}</h1>{restaurant && <Link className="owner-public-link" to={`/m/${restaurant.slug}`} target="_blank" rel="noreferrer">Ver menú ↗︎</Link>}</div><div className="owner-session-actions"><button className="button button--outline" type="button" onClick={() => void signOut()}>Cerrar sesión</button><small className="signout-scope">Solo en este navegador</small></div></div>
       {signOutError && <p className="form-error" role="alert">{signOutError}</p>}
       {!isSupabaseConfigured ? <StatusNotice title="Falta configurar Supabase">Agrega las variables locales para iniciar.</StatusNotice> : ownerLoadedFor !== userId || loading ? <p role="status">Cargando tu carta…</p> : error ? <><StatusNotice title="No pudimos cargar tu menú">{error}</StatusNotice><button type="button" className="button button--outline" onClick={() => setRetry((value) => value + 1)}>Reintentar</button></> : restaurant && <OwnerMenuManagement key={`${userId}:${restaurant.id}`} restaurant={restaurant} onRestaurantUpdated={(patch) => setRestaurant((current) => current ? { ...current, ...patch } : current)} />}
     </main>

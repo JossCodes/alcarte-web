@@ -42,7 +42,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .landing h1 em { color: var(--accent); font-weight: 500; }
 .lead { max-width: 392px; color: #77776d; font-size: 16px; line-height: 1.8; }
 .landing-actions { display: flex; align-items: center; gap: 25px; margin-top: 31px; }
-.button { display: inline-flex; align-items: center; justify-content: center; gap: 23px; min-height: 51px; padding: 0 19px; border-radius: 5px; font-size: 12px; font-weight: 600; transition: transform .2s, background .2s; }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 23px; min-height: 51px; padding: 0 19px; border-radius: 5px; color: inherit; font-size: 12px; font-weight: 600; transition: transform .2s, background .2s; }
 .button:hover { transform: translateY(-2px); }
 .button--dark { color: #fff; background: var(--green); }
 .button--dark:hover { background: #1d3c2d; }
@@ -117,7 +117,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .restaurant-profile-form textarea { min-height: 82px; }
 .restaurant-profile-form .editor-hint { margin: 0; }
 .restaurant-profile-form .save-category-button { width: 100%; min-height: 48px; }
-.button--outline { min-height: 40px; border: 1px solid #d9d6cc; background: transparent; cursor: pointer; }
+.button--outline { min-height: 40px; border: 1px solid #d9d6cc; color: #292c26; -webkit-text-fill-color: #292c26; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
 .button--outline:hover { background: #efeee8; }
 .owner-section-head { display: flex; align-items: flex-end; justify-content: space-between; margin: 34px 0 11px; }
 .owner-section-head h2 { margin: 8px 0 0; font: 500 28px 'Playfair Display', Georgia, serif; }
