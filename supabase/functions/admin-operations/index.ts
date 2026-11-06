@@ -267,7 +267,7 @@ async function getRestaurantMenu(admin: SupabaseClient, body: Record<string, unk
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!uuid.test(restaurantId)) return { status: 400, body: { error: "Selecciona un restaurante válido." } };
   const { data: restaurant, error: restaurantError } = await admin.from("restaurants")
-    .select("id,slug,name,description,is_active,menu_theme,menu_accent_color,menu_logo_path,menu_cover_path")
+    .select("id,slug,name,description,is_active,product_limit,menu_theme,menu_accent_color,menu_logo_path,menu_cover_path")
     .eq("id", restaurantId).maybeSingle();
   if (restaurantError) throw restaurantError;
   if (!restaurant) return { status: 404, body: { error: "No se encontró el restaurante." } };

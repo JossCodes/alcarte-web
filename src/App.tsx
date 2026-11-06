@@ -13,6 +13,7 @@ interface Restaurant {
   name: string
   description: string
   is_active: boolean
+  product_limit?: number
   menu_theme: MenuTheme
   menu_accent_color: string
   menu_logo_path: string | null
@@ -289,6 +290,7 @@ function AdminDashboard() {
   const [newRestaurant, setNewRestaurant] = useState({ name: '', slug: '', description: '', productLimit: '40', ownerEmail: '' })
   const [assignments, setAssignments] = useState<Record<string, string>>({})
   const [transferData, setTransferData] = useState<{ restaurant: Restaurant; categories: Category[]; products: Product[] } | null>(null)
+  const [editingData, setEditingData] = useState<{ restaurant: Restaurant; categories: Category[]; products: Product[] } | null>(null)
   const [signOutError, setSignOutError] = useState('')
 
   async function callAdmin<T>(body: Record<string, unknown>): Promise<T> {
@@ -365,6 +367,22 @@ function AdminDashboard() {
     finally { setBusy(false) }
   }
 
+  async function openMenuEditor(restaurantId: string) {
+    setBusy(true); setError('')
+    try {
+      const result = await callAdmin<{ restaurant: Restaurant; categories: Category[]; products: Product[] }>({ action: 'getRestaurantMenu', restaurantId })
+      setEditingData(result)
+    } catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'No se pudo cargar el menú.') }
+    finally { setBusy(false) }
+  }
+
+  async function reloadEditingMenu() {
+    if (!editingData) return { categories: [], products: [] }
+    const result = await callAdmin<{ restaurant: Restaurant; categories: Category[]; products: Product[] }>({ action: 'getRestaurantMenu', restaurantId: editingData.restaurant.id })
+    setEditingData(result)
+    return { categories: result.categories, products: result.products }
+  }
+
   async function signOut() {
     setSignOutError('')
     const failure = await signOutLocally()
@@ -376,7 +394,8 @@ function AdminDashboard() {
     {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="owner-notice" role="status">{message}</p>}
     {recoveryUrl && <section className="admin-recovery"><strong>Enlace de un solo uso</strong><p>Se muestra una vez. Cópialo y entrégalo de forma segura.</p><input readOnly value={recoveryUrl} aria-label="Enlace temporal de acceso" /><button className="button button--outline" type="button" onClick={() => void navigator.clipboard.writeText(recoveryUrl)}>Copiar enlace</button><button type="button" className="text-button" onClick={() => setRecoveryUrl('')}>Ocultar enlace</button></section>}
     <details className="admin-create" open><summary>＋ Crear restaurante y acceso</summary><form className="admin-form" onSubmit={(event) => void create(event)}><label>Nombre del restaurante<input required maxLength={120} value={newRestaurant.name} onChange={(event) => setNewRestaurant({ ...newRestaurant, name: event.target.value })} /></label><label>Identificador de URL<input required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={60} placeholder="mi-restaurante" value={newRestaurant.slug} onChange={(event) => setNewRestaurant({ ...newRestaurant, slug: event.target.value })} /></label><label>Descripción<input maxLength={240} value={newRestaurant.description} onChange={(event) => setNewRestaurant({ ...newRestaurant, description: event.target.value })} /></label><label>Correo del dueño<input type="email" required value={newRestaurant.ownerEmail} onChange={(event) => setNewRestaurant({ ...newRestaurant, ownerEmail: event.target.value })} /></label><label>Límite de productos<input type="number" min="1" max="40" value={newRestaurant.productLimit} onChange={(event) => setNewRestaurant({ ...newRestaurant, productLimit: event.target.value })} /></label><button className="button button--dark" disabled={busy}>{busy ? 'Creando…' : 'Crear y generar acceso'}</button></form></details>
-     <section className="admin-restaurants"><div className="owner-section-head"><div><span className="simple-kicker">CUENTAS</span><h2>Restaurantes</h2></div><button type="button" className="text-button" onClick={() => void load()}>Actualizar</button></div>{restaurants.map((restaurant) => <article className="admin-restaurant-card" key={restaurant.id}><div className="admin-restaurant-heading"><div><h3>{restaurant.name}</h3><p>/{restaurant.slug} · límite {restaurant.product_limit} productos</p></div><span className={restaurant.is_active ? 'admin-status active' : 'admin-status'}>{restaurant.is_active ? 'Activo' : 'Desactivado'}</span></div><p className="admin-owner-email">{restaurant.owners.map((owner) => owner.email ?? 'Cuenta sin correo').join(', ') || 'Sin dueño asignado'}</p><div className="admin-card-actions"><button type="button" className="button button--outline" disabled={busy} onClick={() => void update(restaurant)}>{restaurant.is_active ? 'Desactivar' : 'Reactivar'}</button><button type="button" className="button button--outline" disabled={busy} onClick={() => void openTransfer(restaurant.id)}>Importar / exportar / respaldar</button>{restaurant.owners.map((owner) => <button key={owner.id} type="button" className="text-button" disabled={busy} onClick={() => void recover(restaurant, owner.id)}>Generar recuperación</button>)}</div>{!restaurant.owners.length && <div className="admin-assign-row"><input type="email" placeholder="Correo de cuenta existente" value={assignments[restaurant.id] ?? ''} onChange={(event) => setAssignments({ ...assignments, [restaurant.id]: event.target.value })} /><button type="button" className="button button--outline" disabled={busy || !assignments[restaurant.id]} onClick={() => void assign(restaurant)}>Asignar acceso</button></div>}</article>)}</section>
+     <section className="admin-restaurants"><div className="owner-section-head"><div><span className="simple-kicker">CUENTAS</span><h2>Restaurantes</h2></div><button type="button" className="text-button" onClick={() => void load()}>Actualizar</button></div>{restaurants.map((restaurant) => <article className="admin-restaurant-card" key={restaurant.id}><div className="admin-restaurant-heading"><div><h3>{restaurant.name}</h3><p>/{restaurant.slug} · límite {restaurant.product_limit} productos</p></div><span className={restaurant.is_active ? 'admin-status active' : 'admin-status'}>{restaurant.is_active ? 'Activo' : 'Desactivado'}</span></div><p className="admin-owner-email">{restaurant.owners.map((owner) => owner.email ?? 'Cuenta sin correo').join(', ') || 'Sin dueño asignado'}</p><div className="admin-card-actions"><button type="button" className="button button--outline" disabled={busy} onClick={() => void update(restaurant)}>{restaurant.is_active ? 'Desactivar' : 'Reactivar'}</button><button type="button" className="button button--outline" disabled={busy || !restaurant.is_active} onClick={() => void openMenuEditor(restaurant.id)}>Editar menú</button><button type="button" className="button button--outline" disabled={busy} onClick={() => void openTransfer(restaurant.id)}>Importar / exportar / respaldar</button>{restaurant.owners.map((owner) => <button key={owner.id} type="button" className="text-button" disabled={busy} onClick={() => void recover(restaurant, owner.id)}>Generar recuperación</button>)}</div>{!restaurant.owners.length && <div className="admin-assign-row"><input type="email" placeholder="Correo de cuenta existente" value={assignments[restaurant.id] ?? ''} onChange={(event) => setAssignments({ ...assignments, [restaurant.id]: event.target.value })} /><button type="button" className="button button--outline" disabled={busy || !assignments[restaurant.id]} onClick={() => void assign(restaurant)}>Asignar acceso</button></div>}</article>)}</section>
+     {editingData && <section className="admin-transfer-area"><button className="text-button" type="button" onClick={() => setEditingData(null)}>Cerrar editor</button><h2>Editar menú · {editingData.restaurant.name}</h2><p className="editor-hint">Los cambios se publican directamente en el menú del restaurante.</p><OwnerMenuManagement key={`admin:${editingData.restaurant.id}`} restaurant={editingData.restaurant} adminMode onAdminReload={reloadEditingMenu} onRestaurantUpdated={(patch) => setEditingData((current) => current ? { ...current, restaurant: { ...current.restaurant, ...patch } } : current)} /></section>}
      {transferData && <section className="admin-transfer-area"><button className="text-button" type="button" onClick={() => setTransferData(null)}>Cerrar herramientas</button><MenuTransferPanel restaurant={transferData.restaurant} categories={transferData.categories} products={transferData.products} onImported={async () => { await load(); await openTransfer(transferData.restaurant.id) }} /></section>}
   </main>
 }
@@ -652,7 +671,7 @@ function ProtectedArea({ area }: { area: 'panel' | 'administración' }) {
   )
 }
 
-function OwnerMenuManagement({ restaurant, onRestaurantUpdated }: { restaurant: Restaurant; onRestaurantUpdated: (patch: Partial<Restaurant>) => void }) {
+function OwnerMenuManagement({ restaurant, onRestaurantUpdated, adminMode = false, onAdminReload }: { restaurant: Restaurant; onRestaurantUpdated: (patch: Partial<Restaurant>) => void; adminMode?: boolean; onAdminReload?: () => Promise<{ categories: Category[]; products: Product[] }> }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -665,6 +684,13 @@ function OwnerMenuManagement({ restaurant, onRestaurantUpdated }: { restaurant: 
   const [section, setSection] = useState<'menu' | 'restaurant' | 'appearance'>('menu')
 
   async function reload() {
+    if (adminMode && onAdminReload) {
+      const result = await onAdminReload()
+      setCategories(result.categories)
+      setProducts(result.products)
+      setOpenCategoryId((current) => current ?? result.categories[0]?.id ?? null)
+      return
+    }
     if (!supabase) return
     const [{ data: categoryData, error: categoryError }, productsWithImages] = await Promise.all([
       supabase.from('categories').select('id,restaurant_id,name,sort_order,is_visible').eq('restaurant_id', restaurant.id).order('sort_order').order('id'),
@@ -759,13 +785,13 @@ function OwnerMenuManagement({ restaurant, onRestaurantUpdated }: { restaurant: 
   if (error) return <StatusNotice title="No pudimos cargar tu menú">{error}</StatusNotice>
 
   return <>
-    <nav className="owner-tabs" aria-label="Secciones del restaurante">
-      {([['menu', 'Mi menú'], ['restaurant', 'Mi restaurante'], ['appearance', 'Apariencia']] as const).map(([key, label]) => <button key={key} type="button" aria-current={section === key ? 'page' : undefined} onClick={() => setSection(key)}>{label}</button>)}
+    <nav className="owner-tabs" aria-label={adminMode ? 'Secciones del menú' : 'Secciones del restaurante'}>
+      {(adminMode ? [['menu', 'Menú'], ['restaurant', 'Imágenes']] as const : [['menu', 'Mi menú'], ['restaurant', 'Mi restaurante'], ['appearance', 'Apariencia']] as const).map(([key, label]) => <button key={key} type="button" aria-current={section === key ? 'page' : undefined} onClick={() => setSection(key)}>{label}</button>)}
     </nav>
       <p className="editor-hint owner-publish-hint">Los cambios de cada sección aparecen en el menú público después de guardarlos.</p>
     {notice && <p className="owner-notice" role="status">{notice}</p>}
     {section === 'menu' && <section aria-labelledby="owner-menu-title">
-      <div className="owner-section-head"><div><span className="simple-kicker">ADMINISTRA TU CARTA</span><h2 id="owner-menu-title">Mi menú</h2></div><span className="product-count">{productCount} / 40 productos</span></div>
+       <div className="owner-section-head"><div><span className="simple-kicker">{adminMode ? 'ADMINISTRACIÓN DE CARTA' : 'ADMINISTRA TU CARTA'}</span><h2 id="owner-menu-title">{adminMode ? 'Menú' : 'Mi menú'}</h2></div><span className="product-count">{productCount} / {restaurant.product_limit ?? 40} productos</span></div>
       <p className="editor-hint">Cada producto pertenece a una categoría. Crea una categoría y después agrega ahí tus productos; puedes cambiar su precio o disponibilidad y guardar los cambios cuando termines.</p>
       <button className="add-category-trigger" type="button" onClick={() => setAddingCategory((current) => !current)}><span aria-hidden="true">＋</span> Agregar categoría</button>
       {addingCategory && <form className="category-create" onSubmit={(event) => void createCategory(event)}>
@@ -773,10 +799,10 @@ function OwnerMenuManagement({ restaurant, onRestaurantUpdated }: { restaurant: 
         <button className="button button--dark" disabled={categoryBusy || !categoryName.trim()}>{categoryBusy ? 'Guardando…' : 'Guardar categoría'}</button>
       </form>}
       {categories.length === 0 && <p className="editor-hint">Aún no hay categorías ni productos. Agrega una categoría, por ejemplo “Bebidas” o “Entradas”, para empezar.</p>}
-      <div className="category-list">{categories.map((category, categoryIndex) => <CategoryEditor key={category.id} category={category} index={categoryIndex} categoryCount={categories.length} products={productsByCategory.get(category.id) ?? []} totalProductCount={productCount} isOpen={openCategoryId === category.id} deleting={categoryBusy} onToggle={() => setOpenCategoryId((current) => current === category.id ? null : category.id)} onMoveCategory={reorderCategory} onDelete={() => void deleteCategory(category)} onSaved={reload} />)}</div>
+      <div className="category-list">{categories.map((category, categoryIndex) => <CategoryEditor key={category.id} category={category} index={categoryIndex} categoryCount={categories.length} products={productsByCategory.get(category.id) ?? []} totalProductCount={productCount} productLimit={restaurant.product_limit ?? 40} isOpen={openCategoryId === category.id} deleting={categoryBusy} adminMode={adminMode} onToggle={() => setOpenCategoryId((current) => current === category.id ? null : category.id)} onMoveCategory={reorderCategory} onDelete={() => void deleteCategory(category)} onSaved={reload} />)}</div>
     </section>}
-    {section === 'restaurant' && <section aria-labelledby="owner-restaurant-title"><div className="owner-section-head"><div><span className="simple-kicker">DATOS E IMÁGENES</span><h2 id="owner-restaurant-title">Mi restaurante</h2></div></div><RestaurantProfileEditor restaurant={restaurant} onSaved={(patch) => onRestaurantUpdated(patch)} /><MenuImageEditor restaurant={restaurant} onSaved={(patch) => onRestaurantUpdated(patch)} /><PasswordChangeForm /></section>}
-    {section === 'appearance' && <section aria-labelledby="owner-appearance-title"><div className="owner-section-head"><div><span className="simple-kicker">PRESENTACIÓN</span><h2 id="owner-appearance-title">Apariencia</h2></div></div><MenuAppearanceEditor restaurant={restaurant} categories={categories} products={products} /></section>}
+    {section === 'restaurant' && <section aria-labelledby="owner-restaurant-title"><div className="owner-section-head"><div><span className="simple-kicker">{adminMode ? 'FOTOS DEL RESTAURANTE' : 'DATOS E IMÁGENES'}</span><h2 id="owner-restaurant-title">{adminMode ? 'Imágenes' : 'Mi restaurante'}</h2></div></div>{!adminMode && <RestaurantProfileEditor restaurant={restaurant} onSaved={(patch) => onRestaurantUpdated(patch)} />}<MenuImageEditor restaurant={restaurant} adminMode={adminMode} onSaved={(patch) => onRestaurantUpdated(patch)} />{!adminMode && <PasswordChangeForm />}</section>}
+    {!adminMode && section === 'appearance' && <section aria-labelledby="owner-appearance-title"><div className="owner-section-head"><div><span className="simple-kicker">PRESENTACIÓN</span><h2 id="owner-appearance-title">Apariencia</h2></div></div><MenuAppearanceEditor restaurant={restaurant} categories={categories} products={products} /></section>}
   </>
 }
 
@@ -1060,7 +1086,7 @@ function RestaurantProfileEditor({ restaurant, onSaved }: { restaurant: Restaura
   </form>
 }
 
-function MenuImageEditor({ restaurant, onSaved }: { restaurant: Restaurant; onSaved: (patch: Pick<Restaurant, 'menu_logo_path' | 'menu_cover_path'>) => void }) {
+function MenuImageEditor({ restaurant, onSaved, adminMode = false }: { restaurant: Restaurant; onSaved: (patch: Pick<Restaurant, 'menu_logo_path' | 'menu_cover_path'>) => void; adminMode?: boolean }) {
   const [logoPath, setLogoPath] = useState(restaurant.menu_logo_path)
   const [coverPath, setCoverPath] = useState(restaurant.menu_cover_path)
   const [logoBlob, setLogoBlob] = useState<Blob | null>(null)
@@ -1152,9 +1178,9 @@ function MenuImageEditor({ restaurant, onSaved }: { restaurant: Restaurant; onSa
         nextCoverPath = await uploadImage(coverBlob, 'cover', coverPath)
         uploadedPaths.push(nextCoverPath)
       }
-      const { error: metadataError } = await supabase.rpc('update_owner_menu_images', {
-        p_logo_path: nextLogoPath, p_cover_path: nextCoverPath,
-      })
+      const { error: metadataError } = adminMode
+        ? await supabase.rpc('admin_update_menu_images', { p_restaurant_id: restaurant.id, p_logo_path: nextLogoPath, p_cover_path: nextCoverPath })
+        : await supabase.rpc('update_owner_menu_images', { p_logo_path: nextLogoPath, p_cover_path: nextCoverPath })
       if (metadataError) throw new Error('No se pudieron publicar las imágenes. Las referencias anteriores siguen activas.')
 
       const oldPaths = [
@@ -1184,9 +1210,9 @@ function MenuImageEditor({ restaurant, onSaved }: { restaurant: Restaurant; onSa
   const storedCoverUrl = coverPath && !removeCover && publicSupabase ? publicSupabase.storage.from('menu-images').getPublicUrl(coverPath).data.publicUrl : null
 
   return <section className="menu-image-editor">
-    <div><span className="simple-kicker">IMÁGENES DEL RESTAURANTE</span><h2>Logo y portada</h2><p>El logo aparece junto al nombre y la portada encabeza el menú. Elegir o quitar una foto solo cambia esta vista; los cambios se publican al guardarlos.</p></div>
+     <div><span className="simple-kicker">IMÁGENES DEL RESTAURANTE</span><h2>Logo y portada</h2><p>El logo se recorta para llenar su círculo y la portada encabeza el menú. Elegir o quitar una foto solo cambia esta vista; los cambios se publican al guardarlos.</p></div>
     <div className="image-upload-grid">
-      <ImageUploadCard title="Logo" description="Cuadrado, con fondo transparente si lo necesitas." imageUrl={logoPreview ?? storedLogoUrl} alt={`Logo de ${restaurant.name}`} onFile={(event) => void chooseFile(event, 'logo')} onRemove={() => clearPreview('logo')} />
+      <ImageUploadCard title="Logo" description="Se ajusta y recorta para llenar el círculo de vista previa." imageUrl={logoPreview ?? storedLogoUrl} alt={`Logo de ${restaurant.name}`} onFile={(event) => void chooseFile(event, 'logo')} onRemove={() => clearPreview('logo')} />
       <ImageUploadCard title="Foto de portada" description="Una imagen horizontal para encabezar la carta." imageUrl={coverPreview ?? storedCoverUrl} alt={`Foto de ${restaurant.name}`} onFile={(event) => void chooseFile(event, 'cover')} onRemove={() => clearPreview('cover')} />
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="owner-notice" role="status">{message}</p>}
@@ -1205,7 +1231,7 @@ function MenuPreview({ restaurant, categories, products, theme, accentColor }: {
   return <div className={`menu-preview public-menu menu-theme--${theme}`} style={menuStyle(previewRestaurant)}><MenuView restaurant={previewRestaurant} categories={categories} products={products} /><div className="menu-credit">Menú digital · alcarte</div></div>
 }
 
-function CategoryEditor({ category, index, categoryCount, products, totalProductCount, isOpen, deleting, onToggle, onMoveCategory, onDelete, onSaved }: { category: Category; index: number; categoryCount: number; products: Product[]; totalProductCount: number; isOpen: boolean; deleting: boolean; onToggle: () => void; onMoveCategory: (index: number, direction: -1 | 1) => Promise<void>; onDelete: () => void; onSaved: () => Promise<void> }) {
+function CategoryEditor({ category, index, categoryCount, products, totalProductCount, productLimit = 40, isOpen, deleting, adminMode = false, onToggle, onMoveCategory, onDelete, onSaved }: { category: Category; index: number; categoryCount: number; products: Product[]; totalProductCount: number; productLimit?: number; isOpen: boolean; deleting: boolean; adminMode?: boolean; onToggle: () => void; onMoveCategory: (index: number, direction: -1 | 1) => Promise<void>; onDelete: () => void; onSaved: () => Promise<void> }) {
   const [name, setName] = useState(category.name)
   const [visible, setVisible] = useState(category.is_visible)
   const [drafts, setDrafts] = useState<ProductDraft[]>([])
@@ -1310,7 +1336,9 @@ function CategoryEditor({ category, index, categoryCount, products, totalProduct
     const payload = drafts.map((draft, sort_order) => ({ ...(draft.id ? { id: draft.id } : {}), name: draft.name.trim(), description: draft.description.trim(), price_cents: parsePriceToCents(draft.price)!, status: draft.status, sort_order }))
     setSaving(true)
     try {
-      const { error: saveError } = await supabase.rpc('save_owner_category_menu', { p_category_id: category.id, p_name: name.trim(), p_is_visible: visible, p_products: payload })
+      const { error: saveError } = adminMode
+        ? await supabase.rpc('admin_save_category_menu', { p_restaurant_id: category.restaurant_id, p_category_id: category.id, p_name: name.trim(), p_is_visible: visible, p_products: payload })
+        : await supabase.rpc('save_owner_category_menu', { p_category_id: category.id, p_name: name.trim(), p_is_visible: visible, p_products: payload })
       if (saveError) {
         setMessage(saveError.code === '23514' ? 'El límite de productos está completo; no se aplicaron cambios.' : 'No se guardaron los cambios. Revisa los datos e inténtalo de nuevo.')
         return
@@ -1344,7 +1372,9 @@ function CategoryEditor({ category, index, categoryCount, products, totalProduct
             if (uploadError) throw new Error('No se pudo subir la foto del producto.')
             nextPath = uploadedPath
           }
-          const { error: imageError } = await supabase.rpc('update_owner_product_image', { p_product_id: productId, p_image_path: nextPath })
+          const { error: imageError } = adminMode
+            ? await supabase.rpc('admin_update_product_image', { p_restaurant_id: category.restaurant_id, p_product_id: productId, p_image_path: nextPath })
+            : await supabase.rpc('update_owner_product_image', { p_product_id: productId, p_image_path: nextPath })
           if (imageError) throw new Error('No se pudo guardar la foto del producto.')
           imageReferenceSaved = true
           if (oldPath && oldPath !== nextPath && !(await removeUnusedProductImages([oldPath]))) mediaCleanupFailed = true
@@ -1411,7 +1441,7 @@ function CategoryEditor({ category, index, categoryCount, products, totalProduct
            <div className="product-position-buttons"><button type="button" className="icon-button" aria-label={`Subir ${draft.name}`} disabled={productIndex === 0} onClick={() => moveDraftBy(draft.draftKey, -1)}>↑</button><button type="button" className="icon-button" aria-label={`Bajar ${draft.name}`} disabled={productIndex === drafts.length - 1} onClick={() => moveDraftBy(draft.draftKey, 1)}>↓</button></div>
         </article>)}
       </div>
-      {totalProductCount + drafts.filter((draft) => !draft.id).length < 40 && <>
+      {totalProductCount + drafts.filter((draft) => !draft.id).length < productLimit && <>
         <button className="add-product-trigger" type="button" onClick={() => { setMessage(''); setAddingProduct((current) => !current) }}><span aria-hidden="true">＋</span> Agregar producto</button>
         {addingProduct && <form className="new-product-form" onSubmit={addDraft}><div className="new-product-form-heading"><strong>Agregar producto</strong><button type="button" className="text-button" onClick={() => { setAddingProduct(false); if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); setNewProductPhoto(null); setNewProductPhotoPreview(null) }}>Cancelar</button></div><label>Nombre<input name="name" maxLength={120} required autoFocus /></label><label>Descripción<input name="description" maxLength={240} placeholder="Opcional" /></label><div className="new-product-bottom"><label>Precio en pesos<input name="price" inputMode="decimal" placeholder="89.50" required /></label><label>Disponibilidad<select name="status" defaultValue="available"><option value="available">Disponible</option><option value="sold_out">Agotado</option><option value="hidden">Oculto</option></select></label></div><small className="hidden-status-help">Oculto: no aparece en el menú para tus clientes.</small><label className="new-product-photo">{newProductPhoto ? 'Foto lista' : 'Subir foto (opcional)'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const input = event.currentTarget; const file = input.files?.[0]; input.value = ''; if (!file) return; setMessage('Preparando la foto…'); try { const blob = await createJpegPreview(file); if (newProductPhotoPreview) URL.revokeObjectURL(newProductPhotoPreview); setNewProductPhoto(blob); setNewProductPhotoPreview(URL.createObjectURL(blob)); setMessage('Foto lista.') } catch (photoError) { setMessage(photoError instanceof Error ? photoError.message : 'No se pudo procesar la foto. Prueba con otra imagen.') } }} /></label>{newProductPhotoPreview && <img className="new-product-photo-preview" src={newProductPhotoPreview} alt="Vista previa del producto" />}<button className="button button--outline" type="submit">Agregar producto</button></form>}
       </>}
