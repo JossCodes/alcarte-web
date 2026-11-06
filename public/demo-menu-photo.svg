@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">Imagen local de prueba para menú</title>
+  <desc id="desc">Ilustración geométrica identificada como recurso de prueba, no como foto de un restaurante.</desc>
+  <rect width="640" height="480" fill="#e9e3d5"/>
+  <ellipse cx="323" cy="254" rx="204" ry="154" fill="#fffdf7"/>
+  <ellipse cx="323" cy="254" rx="161" ry="116" fill="#c6a77a"/>
+  <ellipse cx="323" cy="250" rx="127" ry="83" fill="#f6f0df"/>
+  <path d="M243 257c28-48 92-67 142-34 31 20 48 55 38 84-44 30-133 38-182-2-14-11-13-31 2-48Z" fill="#65836c"/>
+  <circle cx="284" cy="240" r="13" fill="#d27d55"/><circle cx="360" cy="275" r="16" fill="#d27d55"/><circle cx="330" cy="219" r="9" fill="#a9503c"/>
+  <path d="M271 281c24 10 47 9 66-3m15-37c14-9 28-10 43-3" fill="none" stroke="#47684e" stroke-width="8" stroke-linecap="round"/>
+  <rect x="18" y="18" width="162" height="32" rx="6" fill="#fff" opacity=".9"/><text x="32" y="39" font-family="system-ui,sans-serif" font-size="14" font-weight="600" fill="#394039">RECURSO DE PRUEBA</text>
+</svg>

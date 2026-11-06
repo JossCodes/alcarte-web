@@ -1,0 +1,2 @@
+# SPA routes (direct menu links, login/reset pages) must reach the React router.
+/* /index.html 200
