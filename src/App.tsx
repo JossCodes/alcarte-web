@@ -391,17 +391,26 @@ function PublicMenuPage() {
 
   useEffect(() => {
     const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-    if (!themeColor) return
-    const previousColor = themeColor.content
+    const root = document.documentElement
+    const previousColor = themeColor?.content
+    const previousScheme = root.style.colorScheme
+    const previousBackground = root.style.backgroundColor
     if (restaurant) {
       const colors: Record<MenuTheme, string> = {
         minimal: '#FFFFFF',
         classic: '#F5EDDF',
         night: '#191D1A',
       }
-      themeColor.content = colors[restaurant.menu_theme] ?? colors.minimal
+      const color = colors[restaurant.menu_theme] ?? colors.minimal
+      if (themeColor) themeColor.content = color
+      root.style.colorScheme = restaurant.menu_theme === 'night' ? 'dark' : 'light'
+      root.style.backgroundColor = color
     }
-    return () => { themeColor.content = previousColor }
+    return () => {
+      if (themeColor && previousColor !== undefined) themeColor.content = previousColor
+      root.style.colorScheme = previousScheme
+      root.style.backgroundColor = previousBackground
+    }
   }, [restaurant])
 
   useEffect(() => {
